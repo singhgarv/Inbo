@@ -21,6 +21,7 @@ import com.inbo.app.ui.theme.*
 
 /**
  * Standard Inbo Top Bar with logo, tagline and user avatar.
+ * Dynamically responds to InboTheme (light or dark mode).
  * Tagline: "LESS NOISE. MORE LIFE."
  */
 @Composable
@@ -29,6 +30,8 @@ fun InboTopBar(
     userInitial: String = "G",
     onAvatarClick: () -> Unit = {}
 ) {
+    val theme = InboTheme.colors
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -42,14 +45,14 @@ fun InboTopBar(
                     text = "inbo",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
-                    color = InboInk,
+                    color = theme.textPrimary,
                     letterSpacing = (-0.5).sp
                 )
                 Box(
                     modifier = Modifier
                         .padding(bottom = 6.dp, start = 2.dp)
                         .size(5.dp)
-                        .background(InboPurple, CircleShape)
+                        .background(theme.accentPurple, CircleShape)
                 )
             }
             Spacer(modifier = Modifier.height(2.dp))
@@ -58,7 +61,7 @@ fun InboTopBar(
                 fontSize = 10.sp,
                 letterSpacing = 2.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = InboMuted
+                color = theme.textMuted
             )
         }
 
@@ -66,13 +69,13 @@ fun InboTopBar(
             modifier = Modifier
                 .size(42.dp)
                 .clip(CircleShape)
-                .background(InboSoftPurple)
+                .background(theme.softPurple)
                 .clickable { onAvatarClick() },
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = userInitial,
-                color = InboPurple,
+                color = theme.accentPurple,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -87,7 +90,7 @@ fun InboTopBar(
 fun InboSectionEyebrow(
     text: String,
     modifier: Modifier = Modifier,
-    color: Color = InboPurple
+    color: Color = InboTheme.colors.accentPurple
 ) {
     Text(
         text = text.uppercase(),
@@ -109,6 +112,8 @@ fun InboScreenHeader(
     subtitle: String,
     modifier: Modifier = Modifier
 ) {
+    val theme = InboTheme.colors
+
     Column(modifier = modifier.fillMaxWidth()) {
         InboSectionEyebrow(text = eyebrow)
         Spacer(modifier = Modifier.height(8.dp))
@@ -117,7 +122,7 @@ fun InboScreenHeader(
             fontSize = 30.sp,
             lineHeight = 36.sp,
             fontWeight = FontWeight.Bold,
-            color = InboInk,
+            color = theme.textPrimary,
             letterSpacing = (-0.5).sp
         )
         Spacer(modifier = Modifier.height(8.dp))
@@ -125,20 +130,21 @@ fun InboScreenHeader(
             text = subtitle,
             fontSize = 14.sp,
             lineHeight = 20.sp,
-            color = InboMuted
+            color = theme.textMuted
         )
     }
 }
 
 /**
  * Consistent Inbo Card with subtle border and rounded corners.
+ * Automatically adopts the active theme's card surface and border colors.
  */
 @Composable
 fun InboCard(
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 18.dp,
-    containerColor: Color = InboCardWhite,
-    borderColor: Color = InboBorder,
+    containerColor: Color = InboTheme.colors.cardSurface,
+    borderColor: Color = InboTheme.colors.cardBorder,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -174,9 +180,11 @@ fun InboStatCard(
     value: String,
     subtitle: String,
     modifier: Modifier = Modifier,
-    accentColor: Color = InboPurple,
+    accentColor: Color = InboTheme.colors.accentPurple,
     onClick: (() -> Unit)? = null
 ) {
+    val theme = InboTheme.colors
+
     InboCard(
         modifier = modifier,
         cornerRadius = 18.dp,
@@ -187,7 +195,7 @@ fun InboStatCard(
             fontSize = 10.sp,
             letterSpacing = 1.2.sp,
             fontWeight = FontWeight.Bold,
-            color = InboMuted
+            color = theme.textMuted
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -196,7 +204,7 @@ fun InboStatCard(
             text = value,
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
-            color = InboInk
+            color = theme.textPrimary
         )
 
         Spacer(modifier = Modifier.height(4.dp))
@@ -211,7 +219,7 @@ fun InboStatCard(
             Text(
                 text = subtitle,
                 fontSize = 12.sp,
-                color = InboMuted,
+                color = theme.textMuted,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -225,8 +233,8 @@ fun InboStatCard(
 fun InboBadge(
     text: String,
     modifier: Modifier = Modifier,
-    containerColor: Color = InboSoftPurple,
-    contentColor: Color = InboPurple
+    containerColor: Color = InboTheme.colors.softPurple,
+    contentColor: Color = InboTheme.colors.accentPurple
 ) {
     Box(
         modifier = modifier
@@ -254,13 +262,15 @@ fun InboFilterChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val theme = InboTheme.colors
+
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) InboPurple else InboCardWhite)
+            .background(if (selected) theme.accentPurple else theme.cardSurface)
             .border(
                 1.dp,
-                if (selected) InboPurple else InboBorder,
+                if (selected) theme.accentPurple else theme.cardBorder,
                 RoundedCornerShape(12.dp)
             )
             .clickable { onClick() }
@@ -271,7 +281,7 @@ fun InboFilterChip(
             text = text,
             fontSize = 12.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            color = if (selected) Color.White else InboMuted
+            color = if (selected) Color.White else theme.textMuted
         )
     }
 }
@@ -287,16 +297,18 @@ fun InboButton(
     icon: ImageVector? = null,
     enabled: Boolean = true
 ) {
+    val theme = InboTheme.colors
+
     Button(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier.height(48.dp),
         shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = InboPurple,
+            containerColor = theme.accentPurple,
             contentColor = Color.White,
-            disabledContainerColor = InboSoftPurple,
-            disabledContentColor = InboMuted
+            disabledContainerColor = theme.softPurple,
+            disabledContentColor = theme.textMuted
         )
     ) {
         if (icon != null) {

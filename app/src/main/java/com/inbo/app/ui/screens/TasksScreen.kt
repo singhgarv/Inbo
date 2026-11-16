@@ -9,7 +9,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,9 +25,11 @@ import com.inbo.app.ui.theme.*
 
 @Composable
 fun TasksScreen(
-    tasks: SnapshotStateList<InboTask>,
-    nextId: Int,
-    onNextIdIncrement: () -> Unit,
+    tasks: List<InboTask>,
+    onAddTask: (title: String, category: String) -> Unit,
+    onToggleTask: (id: Int, completed: Boolean) -> Unit,
+    onDeleteTask: (id: Int) -> Unit,
+    onClearCompleted: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var taskInput by remember { mutableStateOf("") }
@@ -50,15 +51,7 @@ fun TasksScreen(
     val submitTask: () -> Unit = {
         val trimmed = taskInput.trim()
         if (trimmed.isNotEmpty()) {
-            tasks.add(
-                InboTask(
-                    id = nextId,
-                    title = trimmed,
-                    completed = false,
-                    category = selectedCategory
-                )
-            )
-            onNextIdIncrement()
+            onAddTask(trimmed, selectedCategory)
             taskInput = ""
             keyboardController?.hide()
         }
@@ -97,13 +90,13 @@ fun TasksScreen(
                         text = "$completed of $total completed",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
-                        color = InboMuted
+                        color = InboTheme.colors.textMuted
                     )
                     Text(
                         text = "${(progress * 100).toInt()}%",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = InboPurple
+                        color = InboTheme.colors.accentPurple
                     )
                 }
                 Spacer(modifier = Modifier.height(6.dp))
@@ -113,8 +106,8 @@ fun TasksScreen(
                         .fillMaxWidth()
                         .height(6.dp)
                         .clip(RoundedCornerShape(3.dp)),
-                    color = InboPurple,
-                    trackColor = InboSoftPurple
+                    color = InboTheme.colors.accentPurple,
+                    trackColor = InboTheme.colors.softPurple
                 )
             }
         }
@@ -128,7 +121,7 @@ fun TasksScreen(
                 fontSize = 10.sp,
                 letterSpacing = 1.2.sp,
                 fontWeight = FontWeight.Bold,
-                color = InboMuted
+                color = InboTheme.colors.textMuted
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -138,16 +131,16 @@ fun TasksScreen(
                 onValueChange = { taskInput = it },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = {
-                    Text("What needs to get done?", color = InboMuted, fontSize = 14.sp)
+                    Text("What needs to get done?", color = InboTheme.colors.textMuted, fontSize = 14.sp)
                 },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = InboPurple,
-                    unfocusedBorderColor = InboBorder,
-                    cursorColor = InboPurple,
-                    focusedTextColor = InboInk,
-                    unfocusedTextColor = InboInk
+                    focusedBorderColor = InboTheme.colors.accentPurple,
+                    unfocusedBorderColor = InboTheme.colors.cardBorder,
+                    cursorColor = InboTheme.colors.accentPurple,
+                    focusedTextColor = InboTheme.colors.textPrimary,
+                    unfocusedTextColor = InboTheme.colors.textPrimary
                 ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { submitTask() })
@@ -166,7 +159,7 @@ fun TasksScreen(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) InboSoftPurple else InboBackground)
+                            .background(if (isSelected) InboTheme.colors.softPurple else InboTheme.colors.cardSurfaceSubtle)
                             .clickable { selectedCategory = cat }
                             .padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
@@ -174,7 +167,7 @@ fun TasksScreen(
                             text = cat,
                             fontSize = 11.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) InboPurple else InboMuted
+                            color = if (isSelected) InboTheme.colors.accentPurple else InboTheme.colors.textMuted
                         )
                     }
                 }
@@ -203,7 +196,7 @@ fun TasksScreen(
                 text = "Task List",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = InboInk
+                color = InboTheme.colors.textPrimary
             )
 
             if (completed > 0) {
@@ -211,10 +204,8 @@ fun TasksScreen(
                     text = "Clear completed",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = InboPurple,
-                    modifier = Modifier.clickable {
-                        tasks.removeAll { it.completed }
-                    }
+                    color = InboTheme.colors.accentPurple,
+                    modifier = Modifier.clickable { onClearCompleted() }
                 )
             }
         }
@@ -253,10 +244,10 @@ fun TasksScreen(
                     Box(
                         modifier = Modifier
                             .size(44.dp)
-                            .background(InboSoftPurple, CircleShape),
+                            .background(InboTheme.colors.softPurple, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("✦", fontSize = 20.sp, color = InboPurple)
+                        Text("✦", fontSize = 20.sp, color = InboTheme.colors.accentPurple)
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -265,7 +256,7 @@ fun TasksScreen(
                         text = if (selectedFilter == "Completed") "No completed tasks yet" else "Nothing on your list",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = InboInk
+                        color = InboTheme.colors.textPrimary
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
@@ -273,7 +264,7 @@ fun TasksScreen(
                     Text(
                         text = if (selectedFilter == "Completed") "Check off items when you finish them." else "Add your first task above to get started.",
                         fontSize = 13.sp,
-                        color = InboMuted
+                        color = InboTheme.colors.textMuted
                     )
                 }
             }
@@ -283,7 +274,7 @@ fun TasksScreen(
                     InboCard(
                         modifier = Modifier.fillMaxWidth(),
                         cornerRadius = 16.dp,
-                        containerColor = if (task.completed) Color(0xFFFAFAFD) else InboCardWhite
+                        containerColor = if (task.completed) InboTheme.colors.cardSurfaceSubtle else InboTheme.colors.cardSurface
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -292,14 +283,11 @@ fun TasksScreen(
                             Checkbox(
                                 checked = task.completed,
                                 onCheckedChange = { isChecked ->
-                                    val index = tasks.indexOfFirst { it.id == task.id }
-                                    if (index != -1) {
-                                        tasks[index] = task.copy(completed = isChecked)
-                                    }
+                                    onToggleTask(task.id, isChecked)
                                 },
                                 colors = CheckboxDefaults.colors(
-                                    checkedColor = InboPurple,
-                                    uncheckedColor = InboSubtle,
+                                    checkedColor = InboTheme.colors.accentPurple,
+                                    uncheckedColor = InboTheme.colors.textSubtle,
                                     checkmarkColor = Color.White
                                 )
                             )
@@ -311,7 +299,7 @@ fun TasksScreen(
                                     text = task.title,
                                     fontSize = 14.sp,
                                     fontWeight = if (task.completed) FontWeight.Normal else FontWeight.Medium,
-                                    color = if (task.completed) InboMuted else InboInk,
+                                    color = if (task.completed) InboTheme.colors.textMuted else InboTheme.colors.textPrimary,
                                     textDecoration = if (task.completed) TextDecoration.LineThrough else TextDecoration.None
                                 )
 
@@ -319,21 +307,21 @@ fun TasksScreen(
 
                                 InboBadge(
                                     text = task.category,
-                                    containerColor = if (task.completed) InboBackground else InboSoftPurple,
-                                    contentColor = if (task.completed) InboMuted else InboPurple
+                                    containerColor = if (task.completed) InboTheme.colors.cardSurfaceSubtle else InboTheme.colors.softPurple,
+                                    contentColor = if (task.completed) InboTheme.colors.textMuted else InboTheme.colors.accentPurple
                                 )
                             }
 
                             IconButton(
                                 onClick = {
-                                    tasks.removeAll { it.id == task.id }
+                                    onDeleteTask(task.id)
                                 },
                                 modifier = Modifier.size(32.dp)
                             ) {
                                 Icon(
                                     imageVector = InboIcons.Delete,
                                     contentDescription = "Delete task",
-                                    tint = InboSubtle,
+                                    tint = InboTheme.colors.textSubtle,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
