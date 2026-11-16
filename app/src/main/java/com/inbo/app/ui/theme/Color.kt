@@ -2,10 +2,22 @@ package com.inbo.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// Inbo Design System Palette
+// Tagline: Less noise. More life.
+val InboBackground = Color(0xFFF7F7FB)
+val InboInk = Color(0xFF202137)
+val InboMuted = Color(0xFF85869A)
+val InboPurple = Color(0xFF7165E8)
+val InboSoftPurple = Color(0xFFECEAFF)
+val InboCardWhite = Color(0xFFFFFFFF)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Supplementary Semantic Tones
+val InboBorder = Color(0xFFECECF2)
+val InboSubtle = Color(0xFFB4B5C6)
+val InboLightPurple = Color(0xFFF4F3FF)
+val InboPurpleHover = Color(0xFF5E51DC)
+val InboSuccess = Color(0xFF2E7D32)
+val InboSuccessSoft = Color(0xFFE8F5E9)
+val InboWarning = Color(0xFFED6C02)
+val InboWarningSoft = Color(0xFFFFF4E5)
+val InboDivider = Color(0xFFF0F0F6)
