@@ -36,7 +36,7 @@ class CalendarRepository(
         timeRange: String,
         type: String,
         location: String? = null,
-        date: String = "16"
+        date: String = ""
     ) {
         scope.launch {
             val created = calendarDao.insertEvent(title, timeRange, type, location, date)

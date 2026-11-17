@@ -178,4 +178,42 @@ object InboIcons {
             lineTo(19f, 7.5f)
         }.build()
     }
+
+    val ChevronLeft: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "ChevronLeft",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).path(
+            stroke = SolidColor(Color.Black),
+            strokeLineWidth = 2f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round
+        ) {
+            moveTo(15f, 18f)
+            lineTo(9f, 12f)
+            lineTo(15f, 6f)
+        }.build()
+    }
+
+    val ChevronRight: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "ChevronRight",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).path(
+            stroke = SolidColor(Color.Black),
+            strokeLineWidth = 2f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round
+        ) {
+            moveTo(9f, 6f)
+            lineTo(15f, 12f)
+            lineTo(9f, 18f)
+        }.build()
+    }
 }

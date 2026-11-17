@@ -27,7 +27,7 @@ data class InboxUpdate(
 
 /**
  * Scheduled calendar event item.
- * Supports date association (e.g. "2026-11-16" or day "16"), start/end time range,
+ * Supports date association (e.g. "2026-11-16"), start/end time range,
  * event type/category (e.g. "Meeting", "Focus Time", "Review"), and location.
  */
 data class CalendarEvent(
@@ -36,8 +36,8 @@ data class CalendarEvent(
     val timeRange: String,
     val type: String,
     val location: String? = null,
-    val date: String = "16",
-    val isToday: Boolean = true
+    val date: String = "",
+    val isToday: Boolean = false
 )
 
 /**

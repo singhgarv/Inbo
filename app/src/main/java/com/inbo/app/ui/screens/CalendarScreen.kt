@@ -1,5 +1,8 @@
 package com.inbo.app.ui.screens
 
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +22,18 @@ import com.inbo.app.model.CalendarDeadline
 import com.inbo.app.model.CalendarEvent
 import com.inbo.app.ui.components.*
 import com.inbo.app.ui.theme.*
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
+import java.util.Locale
+
+private data class CalendarDayItem(
+    val dayOfWeekLabel: String,
+    val dayOfMonthText: String,
+    val isoDate: String,
+    val isToday: Boolean
+)
 
 @Composable
 fun CalendarScreen(
@@ -30,23 +45,111 @@ fun CalendarScreen(
     onDeleteDeadline: (id: Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var selectedDayIndex by remember { mutableIntStateOf(0) }
+    var today by remember { mutableStateOf(LocalDate.now()) }
+    val todayIso = remember(today) { today.toString() }
+
+    // Selected date defaults to today whenever Calendar opens
+    var selectedIsoDate by remember { mutableStateOf(todayIso) }
+
+    // Start of currently viewed week (Monday)
+    var currentWeekMonday by remember {
+        mutableStateOf(today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)))
+    }
+
     var showAddEventDialog by remember { mutableStateOf(false) }
 
-    val daysOfWeek = listOf(
-        Triple("Mon", "16", true),
-        Triple("Tue", "17", false),
-        Triple("Wed", "18", false),
-        Triple("Thu", "19", false),
-        Triple("Fri", "20", false),
-        Triple("Sat", "21", false),
-        Triple("Sun", "22", false)
-    )
+    // Refresh today's date whenever Inbo returns to the foreground.
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-    val selectedDate = daysOfWeek[selectedDayIndex].second
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val newToday = LocalDate.now()
+                val previousToday = today
 
-    // Filter events by selected date
-    val filteredEvents = events.filter { it.date == selectedDate }
+                if (newToday != previousToday) {
+                    val previousTodayIso = previousToday.toString()
+                    val previousMonday = previousToday.with(
+                        TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)
+                    )
+
+                    val wasViewingToday =
+                        currentWeekMonday == previousMonday &&
+                                selectedIsoDate == previousTodayIso
+
+                    today = newToday
+
+                    if (wasViewingToday) {
+                        currentWeekMonday = newToday.with(
+                            TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)
+                        )
+                        selectedIsoDate = newToday.toString()
+                    }
+                }
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+    val daysOfWeek: List<CalendarDayItem> = remember(currentWeekMonday, todayIso) {
+        val shortDayFormatter = DateTimeFormatter.ofPattern("EEE", Locale.US)
+        (0L..6L).map { offset ->
+            val date = currentWeekMonday.plusDays(offset)
+            val iso = date.toString()
+            CalendarDayItem(
+                dayOfWeekLabel = date.format(shortDayFormatter),
+                dayOfMonthText = date.dayOfMonth.toString(),
+                isoDate = iso,
+                isToday = iso == todayIso
+            )
+        }
+    }
+
+    // Dynamic month and year label reflecting the displayed week
+    val monthYearHeader = remember(currentWeekMonday) {
+        val weekEnd = currentWeekMonday.plusDays(6)
+        val monthFormatter = DateTimeFormatter.ofPattern("MMMM", Locale.US)
+        if (currentWeekMonday.month == weekEnd.month && currentWeekMonday.year == weekEnd.year) {
+            "${currentWeekMonday.format(monthFormatter).uppercase(Locale.US)} ${currentWeekMonday.year}"
+        } else if (currentWeekMonday.year == weekEnd.year) {
+            "${currentWeekMonday.format(monthFormatter).uppercase(Locale.US)} / ${weekEnd.format(monthFormatter).uppercase(Locale.US)} ${currentWeekMonday.year}"
+        } else {
+            "${currentWeekMonday.format(monthFormatter).uppercase(Locale.US)} ${currentWeekMonday.year} / ${weekEnd.format(monthFormatter).uppercase(Locale.US)} ${weekEnd.year}"
+        }
+    }
+
+    // Friendly date header for the scheduled events card
+    val selectedDateFriendly = remember(selectedIsoDate) {
+        try {
+            val parsed = LocalDate.parse(selectedIsoDate)
+            parsed.format(DateTimeFormatter.ofPattern("MMM d", Locale.US))
+        } catch (_: Exception) {
+            selectedIsoDate
+        }
+    }
+
+    // Filter events by selected date:
+    // Matches exact ISO date (e.g. "2026-11-17").
+    // For legacy records where only day-of-month was stored (e.g. "17"), safely matches when
+    // the day number coincides with the selected date's day of month without fabricating months.
+    val filteredEvents = events.filter {
+        if (it.date == selectedIsoDate) {
+            true
+        } else if (it.date.length <= 2) {
+            val selectedDayStr = try {
+                LocalDate.parse(selectedIsoDate).dayOfMonth.toString()
+            } catch (_: Exception) {
+                ""
+            }
+            it.date.trimStart('0') == selectedDayStr.trimStart('0')
+        } else {
+            false
+        }
+    }
 
     Column(
         modifier = modifier
@@ -66,14 +169,57 @@ fun CalendarScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Week strip selector
-        Text(
-            text = "NOVEMBER 2026",
-            fontSize = 11.sp,
-            letterSpacing = 1.5.sp,
-            fontWeight = FontWeight.Bold,
-            color = InboTheme.colors.textMuted
-        )
+        // Week strip selector with previous/next week navigation
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = monthYearHeader,
+                fontSize = 11.sp,
+                letterSpacing = 1.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = InboTheme.colors.textMuted
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                IconButton(
+                    onClick = {
+                        val prevMonday = currentWeekMonday.minusWeeks(1)
+                        currentWeekMonday = prevMonday
+                        selectedIsoDate = prevMonday.toString()
+                    },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = InboIcons.ChevronLeft,
+                        contentDescription = "Previous week",
+                        tint = InboTheme.colors.textMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        val nextMonday = currentWeekMonday.plusWeeks(1)
+                        currentWeekMonday = nextMonday
+                        selectedIsoDate = nextMonday.toString()
+                    },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = InboIcons.ChevronRight,
+                        contentDescription = "Next week",
+                        tint = InboTheme.colors.textMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(10.dp))
 
@@ -81,8 +227,8 @@ fun CalendarScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            daysOfWeek.forEachIndexed { index, (day, date, isToday) ->
-                val isSelected = selectedDayIndex == index
+            daysOfWeek.forEach { dayItem ->
+                val isSelected = selectedIsoDate == dayItem.isoDate
                 Column(
                     modifier = Modifier
                         .clip(RoundedCornerShape(14.dp))
@@ -92,25 +238,25 @@ fun CalendarScreen(
                             if (isSelected) InboTheme.colors.accentPurple else InboTheme.colors.cardBorder,
                             RoundedCornerShape(14.dp)
                         )
-                        .clickable { selectedDayIndex = index }
+                        .clickable { selectedIsoDate = dayItem.isoDate }
                         .padding(vertical = 10.dp, horizontal = 9.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = day,
+                        text = dayItem.dayOfWeekLabel,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         color = if (isSelected) Color.White.copy(alpha = 0.8f) else InboTheme.colors.textMuted
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = date,
+                        text = dayItem.dayOfMonthText,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (isSelected) Color.White else InboTheme.colors.textPrimary
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    if (isToday) {
+                    if (dayItem.isToday) {
                         Box(
                             modifier = Modifier
                                 .size(4.dp)
@@ -125,7 +271,7 @@ fun CalendarScreen(
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // Today's schedule section
+        // Schedule section
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -152,7 +298,7 @@ fun CalendarScreen(
         if (filteredEvents.isEmpty()) {
             InboCard(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "No events scheduled for Nov $selectedDate.",
+                    text = "No events scheduled for $selectedDateFriendly.",
                     fontSize = 13.sp,
                     color = InboTheme.colors.textMuted
                 )
@@ -377,7 +523,7 @@ fun CalendarScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Adding to: Nov $selectedDate",
+                        text = "Adding to: $selectedDateFriendly ($selectedIsoDate)",
                         fontSize = 11.sp,
                         color = InboTheme.colors.accentPurple,
                         fontWeight = FontWeight.Medium
@@ -393,7 +539,7 @@ fun CalendarScreen(
                                 newTime.trim(),
                                 selectedType,
                                 null,
-                                selectedDate
+                                selectedIsoDate
                             )
                             showAddEventDialog = false
                         }

@@ -8,6 +8,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import com.inbo.app.model.CalendarDeadline
 import com.inbo.app.model.CalendarEvent
 import com.inbo.app.model.CapturedNotification
+import com.inbo.app.model.ImportantUpdate
 import com.inbo.app.model.InboSettings
 import com.inbo.app.model.InboTask
 import kotlinx.coroutines.CoroutineDispatcher
@@ -27,7 +28,7 @@ class InboDatabaseHelper(context: Context) : SQLiteOpenHelper(
 ) {
     companion object {
         const val DATABASE_NAME = "inbo_tasks.db"
-        const val DATABASE_VERSION = 5
+        const val DATABASE_VERSION = 7
 
         // 72-hour retention threshold for captured notification content
         const val RETENTION_PERIOD_MS = 72L * 60L * 60L * 1000L
@@ -79,6 +80,25 @@ class InboDatabaseHelper(context: Context) : SQLiteOpenHelper(
         const val COLUMN_NOTIF_IS_DISMISSED = "is_dismissed"
         const val COLUMN_NOTIF_IS_READ = "is_read"
 
+        // Important Updates table
+        const val TABLE_IMPORTANT_UPDATES = "important_updates"
+        const val COLUMN_UPDATE_ID = "id"
+        const val COLUMN_UPDATE_STABLE_KEY = "stable_key"
+        const val COLUMN_UPDATE_SOURCE_KEY = "source_notification_key"
+        const val COLUMN_UPDATE_SENDER = "sender_or_title"
+        const val COLUMN_UPDATE_CATEGORY = "category"
+        const val COLUMN_UPDATE_CONFIDENCE = "confidence"
+        const val COLUMN_UPDATE_SUMMARY = "summary"
+        const val COLUMN_UPDATE_ACTION_ITEM = "action_item"
+        const val COLUMN_UPDATE_DATE_TEXT = "date_text"
+        const val COLUMN_UPDATE_TIME_TEXT = "time_text"
+        const val COLUMN_UPDATE_VENUE = "venue"
+        const val COLUMN_UPDATE_DETAILS = "details"
+        const val COLUMN_UPDATE_STATUS = "status"
+        const val COLUMN_UPDATE_IS_READ = "is_read"
+        const val COLUMN_UPDATE_CREATED_AT = "created_at"
+        const val COLUMN_UPDATE_UPDATED_AT = "updated_at"
+
         // Setting keys
         const val KEY_DARK_MODE = "dark_mode_enabled"
         const val KEY_QUIET_HOURS = "quiet_hours_enabled"
@@ -97,6 +117,7 @@ class InboDatabaseHelper(context: Context) : SQLiteOpenHelper(
         createSettingsTable(db)
         seedDefaultSettings(db)
         createNotificationsTable(db)
+        createImportantUpdatesTable(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -118,6 +139,17 @@ class InboDatabaseHelper(context: Context) : SQLiteOpenHelper(
             } catch (_: Exception) {
                 // Handle safe idempotence
             }
+        }
+        if (oldVersion < 6) {
+            createImportantUpdatesTable(db)
+        }
+        if (oldVersion < 7) {
+            // Documented migration strategy for Calendar dates:
+            // The date column in calendar_events and calendar_deadlines remains TEXT.
+            // Rather than inventing an arbitrary historical month/year for legacy day-only strings
+            // (such as '16', '17'), existing values are strictly preserved in their original form.
+            // New events and deadlines are guaranteed to receive full ISO dates (YYYY-MM-DD),
+            // while the application layer safely displays and handles both legacy day values and full ISO dates.
         }
     }
 
@@ -161,7 +193,7 @@ class InboDatabaseHelper(context: Context) : SQLiteOpenHelper(
                 $COLUMN_EVENT_TIME_RANGE TEXT NOT NULL,
                 $COLUMN_EVENT_TYPE TEXT NOT NULL,
                 $COLUMN_EVENT_LOCATION TEXT,
-                $COLUMN_EVENT_DATE TEXT NOT NULL DEFAULT '16',
+                $COLUMN_EVENT_DATE TEXT NOT NULL,
                 $COLUMN_EVENT_CREATED_AT INTEGER NOT NULL DEFAULT 0
             )
         """.trimIndent()
@@ -182,6 +214,7 @@ class InboDatabaseHelper(context: Context) : SQLiteOpenHelper(
     }
 
     private fun seedStarterCalendar(db: SQLiteDatabase) {
+        val todayIso = java.time.LocalDate.now().toString()
         val starterEvents = listOf(
             CalendarEvent(
                 id = 1,
@@ -189,7 +222,7 @@ class InboDatabaseHelper(context: Context) : SQLiteOpenHelper(
                 timeRange = "09:30 AM - 10:15 AM",
                 type = "Meeting",
                 location = "Design Room / Virtual",
-                date = "16"
+                date = todayIso
             ),
             CalendarEvent(
                 id = 2,
@@ -197,7 +230,7 @@ class InboDatabaseHelper(context: Context) : SQLiteOpenHelper(
                 timeRange = "11:00 AM - 12:30 PM",
                 type = "Focus Time",
                 location = "Do Not Disturb",
-                date = "16"
+                date = todayIso
             ),
             CalendarEvent(
                 id = 3,
@@ -205,7 +238,7 @@ class InboDatabaseHelper(context: Context) : SQLiteOpenHelper(
                 timeRange = "03:00 PM - 03:45 PM",
                 type = "Review",
                 location = "Conference Room B",
-                date = "16"
+                date = todayIso
             )
         )
         val now = System.currentTimeMillis()
@@ -228,7 +261,7 @@ class InboDatabaseHelper(context: Context) : SQLiteOpenHelper(
                 dueDate = "Tomorrow, 5:00 PM",
                 tag = "High Priority",
                 completed = false,
-                date = "17"
+                date = todayIso
             ),
             CalendarDeadline(
                 id = 2,
@@ -236,7 +269,7 @@ class InboDatabaseHelper(context: Context) : SQLiteOpenHelper(
                 dueDate = "Thu, 12:00 PM",
                 tag = "Milestone",
                 completed = false,
-                date = "19"
+                date = todayIso
             ),
             CalendarDeadline(
                 id = 3,
@@ -244,7 +277,7 @@ class InboDatabaseHelper(context: Context) : SQLiteOpenHelper(
                 dueDate = "Friday, 6:00 PM",
                 tag = "Release",
                 completed = true,
-                date = "20"
+                date = todayIso
             )
         )
         starterDeadlines.forEachIndexed { index, deadline ->
@@ -305,6 +338,30 @@ class InboDatabaseHelper(context: Context) : SQLiteOpenHelper(
             )
         """.trimIndent()
         db.execSQL(createNotificationsSql)
+    }
+
+    private fun createImportantUpdatesTable(db: SQLiteDatabase) {
+        val createImportantUpdatesSql = """
+            CREATE TABLE IF NOT EXISTS $TABLE_IMPORTANT_UPDATES (
+                $COLUMN_UPDATE_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COLUMN_UPDATE_STABLE_KEY TEXT NOT NULL UNIQUE,
+                $COLUMN_UPDATE_SOURCE_KEY TEXT NOT NULL,
+                $COLUMN_UPDATE_SENDER TEXT NOT NULL,
+                $COLUMN_UPDATE_CATEGORY TEXT NOT NULL,
+                $COLUMN_UPDATE_CONFIDENCE INTEGER NOT NULL,
+                $COLUMN_UPDATE_SUMMARY TEXT NOT NULL,
+                $COLUMN_UPDATE_ACTION_ITEM TEXT,
+                $COLUMN_UPDATE_DATE_TEXT TEXT,
+                $COLUMN_UPDATE_TIME_TEXT TEXT,
+                $COLUMN_UPDATE_VENUE TEXT,
+                $COLUMN_UPDATE_DETAILS TEXT,
+                $COLUMN_UPDATE_STATUS TEXT NOT NULL DEFAULT 'ACTIVE',
+                $COLUMN_UPDATE_IS_READ INTEGER NOT NULL DEFAULT 0,
+                $COLUMN_UPDATE_CREATED_AT INTEGER NOT NULL,
+                $COLUMN_UPDATE_UPDATED_AT INTEGER NOT NULL
+            )
+        """.trimIndent()
+        db.execSQL(createImportantUpdatesSql)
     }
 }
 
@@ -421,6 +478,18 @@ class CalendarDao(
             null,
             "${InboDatabaseHelper.COLUMN_EVENT_ID} ASC"
         )
+        val todayIso = try {
+            java.time.LocalDate.now().toString()
+        } catch (_: Throwable) {
+            val cal = java.util.Calendar.getInstance()
+            String.format(
+                java.util.Locale.US,
+                "%04d-%02d-%02d",
+                cal.get(java.util.Calendar.YEAR),
+                cal.get(java.util.Calendar.MONTH) + 1,
+                cal.get(java.util.Calendar.DAY_OF_MONTH)
+            )
+        }
         cursor.use {
             val idIndex = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_EVENT_ID)
             val titleIndex = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_EVENT_TITLE)
@@ -439,7 +508,7 @@ class CalendarDao(
                         type = it.getString(typeIndex),
                         location = if (it.isNull(locationIndex)) null else it.getString(locationIndex),
                         date = date,
-                        isToday = date == "16"
+                        isToday = date == todayIso
                     )
                 )
             }
@@ -452,26 +521,45 @@ class CalendarDao(
         timeRange: String,
         type: String,
         location: String? = null,
-        date: String = "16"
+        date: String = ""
     ): CalendarEvent = withContext(ioDispatcher) {
+        val effectiveDate = if (date.isNotBlank()) date else {
+            try {
+                java.time.LocalDate.now().toString()
+            } catch (_: Throwable) {
+                val cal = java.util.Calendar.getInstance()
+                String.format(
+                    java.util.Locale.US,
+                    "%04d-%02d-%02d",
+                    cal.get(java.util.Calendar.YEAR),
+                    cal.get(java.util.Calendar.MONTH) + 1,
+                    cal.get(java.util.Calendar.DAY_OF_MONTH)
+                )
+            }
+        }
         val db = dbHelper.writableDatabase
         val values = ContentValues().apply {
             put(InboDatabaseHelper.COLUMN_EVENT_TITLE, title)
             put(InboDatabaseHelper.COLUMN_EVENT_TIME_RANGE, timeRange)
             put(InboDatabaseHelper.COLUMN_EVENT_TYPE, type)
             put(InboDatabaseHelper.COLUMN_EVENT_LOCATION, location)
-            put(InboDatabaseHelper.COLUMN_EVENT_DATE, date)
+            put(InboDatabaseHelper.COLUMN_EVENT_DATE, effectiveDate)
             put(InboDatabaseHelper.COLUMN_EVENT_CREATED_AT, System.currentTimeMillis())
         }
         val generatedId = db.insertOrThrow(InboDatabaseHelper.TABLE_EVENTS, null, values)
+        val todayIso = try {
+            java.time.LocalDate.now().toString()
+        } catch (_: Throwable) {
+            effectiveDate
+        }
         CalendarEvent(
             id = generatedId.toInt(),
             title = title,
             timeRange = timeRange,
             type = type,
             location = location,
-            date = date,
-            isToday = date == "16"
+            date = effectiveDate,
+            isToday = effectiveDate == todayIso
         )
     }
 
@@ -837,5 +925,180 @@ class NotificationDao(
     suspend fun clearAllNotifications(): Int = withContext(ioDispatcher) {
         val db = dbHelper.writableDatabase
         db.delete(InboDatabaseHelper.TABLE_NOTIFICATIONS, null, null)
+    }
+}
+
+/**
+ * Data Access Object performing CRUD operations on the SQLite database asynchronously for Important Updates.
+ */
+class ImportantUpdateDao(
+    private val dbHelper: InboDatabaseHelper,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+) {
+
+    suspend fun getAll(): List<ImportantUpdate> = withContext(ioDispatcher) {
+        val db = dbHelper.readableDatabase
+        val list = mutableListOf<ImportantUpdate>()
+        val cursor: Cursor = db.query(
+            InboDatabaseHelper.TABLE_IMPORTANT_UPDATES,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "${InboDatabaseHelper.COLUMN_UPDATE_CREATED_AT} DESC"
+        )
+        cursor.use {
+            val idIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_ID)
+            val stableKeyIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_STABLE_KEY)
+            val sourceKeyIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_SOURCE_KEY)
+            val senderIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_SENDER)
+            val catIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_CATEGORY)
+            val confIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_CONFIDENCE)
+            val summaryIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_SUMMARY)
+            val actionIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_ACTION_ITEM)
+            val dateTextIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_DATE_TEXT)
+            val timeTextIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_TIME_TEXT)
+            val venueIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_VENUE)
+            val detailsIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_DETAILS)
+            val statusIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_STATUS)
+            val isReadIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_IS_READ)
+            val createdIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_CREATED_AT)
+            val updatedIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_UPDATED_AT)
+
+            while (it.moveToNext()) {
+                list.add(
+                    ImportantUpdate(
+                        id = it.getLong(idIdx),
+                        stableKey = it.getString(stableKeyIdx),
+                        sourceNotificationKey = it.getString(sourceKeyIdx),
+                        senderOrTitle = it.getString(senderIdx),
+                        category = it.getString(catIdx),
+                        confidence = it.getInt(confIdx),
+                        summary = it.getString(summaryIdx),
+                        actionItem = if (it.isNull(actionIdx)) null else it.getString(actionIdx),
+                        dateText = if (it.isNull(dateTextIdx)) null else it.getString(dateTextIdx),
+                        timeText = if (it.isNull(timeTextIdx)) null else it.getString(timeTextIdx),
+                        venue = if (it.isNull(venueIdx)) null else it.getString(venueIdx),
+                        details = if (it.isNull(detailsIdx)) null else it.getString(detailsIdx),
+                        status = it.getString(statusIdx),
+                        isRead = it.getInt(isReadIdx) == 1,
+                        createdAt = it.getLong(createdIdx),
+                        updatedAt = it.getLong(updatedIdx)
+                    )
+                )
+            }
+        }
+        list
+    }
+
+    suspend fun insertOrUpdate(update: ImportantUpdate): Long = withContext(ioDispatcher) {
+        val db = dbHelper.writableDatabase
+
+        var existingId: Long? = null
+        var existingCreatedAt: Long? = null
+        var existingIsRead: Int? = null
+
+        val cursor = db.query(
+            InboDatabaseHelper.TABLE_IMPORTANT_UPDATES,
+            arrayOf(
+                InboDatabaseHelper.COLUMN_UPDATE_ID,
+                InboDatabaseHelper.COLUMN_UPDATE_CREATED_AT,
+                InboDatabaseHelper.COLUMN_UPDATE_IS_READ
+            ),
+            "${InboDatabaseHelper.COLUMN_UPDATE_STABLE_KEY} = ?",
+            arrayOf(update.stableKey),
+            null,
+            null,
+            null
+        )
+        cursor.use {
+            if (it.moveToFirst()) {
+                val idIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_ID)
+                val createdIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_CREATED_AT)
+                val isReadIdx = it.getColumnIndexOrThrow(InboDatabaseHelper.COLUMN_UPDATE_IS_READ)
+                existingId = it.getLong(idIdx)
+                existingCreatedAt = it.getLong(createdIdx)
+                existingIsRead = it.getInt(isReadIdx)
+            }
+        }
+
+        val values = ContentValues().apply {
+            put(InboDatabaseHelper.COLUMN_UPDATE_STABLE_KEY, update.stableKey)
+            put(InboDatabaseHelper.COLUMN_UPDATE_SOURCE_KEY, update.sourceNotificationKey)
+            put(InboDatabaseHelper.COLUMN_UPDATE_SENDER, update.senderOrTitle)
+            put(InboDatabaseHelper.COLUMN_UPDATE_CATEGORY, update.category)
+            put(InboDatabaseHelper.COLUMN_UPDATE_CONFIDENCE, update.confidence)
+            put(InboDatabaseHelper.COLUMN_UPDATE_SUMMARY, update.summary)
+            put(InboDatabaseHelper.COLUMN_UPDATE_ACTION_ITEM, update.actionItem)
+            put(InboDatabaseHelper.COLUMN_UPDATE_DATE_TEXT, update.dateText)
+            put(InboDatabaseHelper.COLUMN_UPDATE_TIME_TEXT, update.timeText)
+            put(InboDatabaseHelper.COLUMN_UPDATE_VENUE, update.venue)
+            put(InboDatabaseHelper.COLUMN_UPDATE_DETAILS, update.details)
+            put(InboDatabaseHelper.COLUMN_UPDATE_STATUS, update.status)
+            put(
+                InboDatabaseHelper.COLUMN_UPDATE_IS_READ,
+                existingIsRead ?: if (update.isRead) 1 else 0
+            )
+            put(
+                InboDatabaseHelper.COLUMN_UPDATE_CREATED_AT,
+                existingCreatedAt ?: update.createdAt
+            )
+            put(InboDatabaseHelper.COLUMN_UPDATE_UPDATED_AT, update.updatedAt)
+        }
+
+        if (existingId != null) {
+            db.update(
+                InboDatabaseHelper.TABLE_IMPORTANT_UPDATES,
+                values,
+                "${InboDatabaseHelper.COLUMN_UPDATE_ID} = ?",
+                arrayOf(existingId.toString())
+            )
+            existingId!!
+        } else {
+            db.insert(InboDatabaseHelper.TABLE_IMPORTANT_UPDATES, null, values)
+        }
+    }
+
+    suspend fun updateStatus(id: Long, status: String): Int = withContext(ioDispatcher) {
+        val db = dbHelper.writableDatabase
+        val values = ContentValues().apply {
+            put(InboDatabaseHelper.COLUMN_UPDATE_STATUS, status)
+            put(InboDatabaseHelper.COLUMN_UPDATE_UPDATED_AT, System.currentTimeMillis())
+        }
+        db.update(
+            InboDatabaseHelper.TABLE_IMPORTANT_UPDATES,
+            values,
+            "${InboDatabaseHelper.COLUMN_UPDATE_ID} = ?",
+            arrayOf(id.toString())
+        )
+    }
+
+    suspend fun updateReadState(id: Long, isRead: Boolean): Int = withContext(ioDispatcher) {
+        val db = dbHelper.writableDatabase
+        val values = ContentValues().apply {
+            put(InboDatabaseHelper.COLUMN_UPDATE_IS_READ, if (isRead) 1 else 0)
+            put(InboDatabaseHelper.COLUMN_UPDATE_UPDATED_AT, System.currentTimeMillis())
+        }
+        db.update(
+            InboDatabaseHelper.TABLE_IMPORTANT_UPDATES,
+            values,
+            "${InboDatabaseHelper.COLUMN_UPDATE_ID} = ?",
+            arrayOf(id.toString())
+        )
+    }
+
+    suspend fun delete(id: Long): Int = withContext(ioDispatcher) {
+        val db = dbHelper.writableDatabase
+        db.delete(
+            InboDatabaseHelper.TABLE_IMPORTANT_UPDATES,
+            "${InboDatabaseHelper.COLUMN_UPDATE_ID} = ?",
+            arrayOf(id.toString())
+        )
+    }
+
+    suspend fun clearAll(): Int = withContext(ioDispatcher) {
+        val db = dbHelper.writableDatabase
+        db.delete(InboDatabaseHelper.TABLE_IMPORTANT_UPDATES, null, null)
     }
 }
